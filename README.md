@@ -20,10 +20,11 @@ Secret Finder is a Python tool that revolutionizes the process of identifying ha
     ```bash
     pip install -r requirements.txt
 
-## Usage
+## Uage
 
-Run the tool:
-   ``` python secret_finder.py```
+3. Run the tool:
+   ```bash
+   python secret_finder.py
  
 Enter the path to the APK file when prompted.
 
