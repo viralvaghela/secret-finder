@@ -12,7 +12,7 @@ Secret Finder is a Python tool that revolutionizes the process of identifying ha
 
 1. Clone the repository:
 
-    ```bash
+   ```bash
    git clone https://github.com/viralvaghela/secret-finder.git
 
 2. Install the dependencies:
@@ -23,10 +23,8 @@ Secret Finder is a Python tool that revolutionizes the process of identifying ha
 ## Usage
 
 Run the tool:
-    
-    ```bash
-    python3 secret-finder.py 
-
+   ``` python secret_finder.py```
+ 
 Enter the path to the APK file when prompted.
 
 Choose the file check option:
