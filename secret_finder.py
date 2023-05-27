@@ -35,16 +35,43 @@ def print_tool_name(func):
     return wrapper
 
 # Decompiles the specified APK file
+# Decompiles the specified APK file
 def decompile_apk(apk_path):
     decompiled_path = apk_path + '_decompiled'
 
-    print(f"Decompiling APK: {apk_path}")
-    subprocess.run(['java', '-jar', APKTOOL_PATH, 'd', apk_path, '-o', decompiled_path], stdout=subprocess.DEVNULL)
+    print(f"Decompiling APK: {apk_path} It may take some time, please wait...\n ")
 
-    print("APK decompiled successfully!")
-    print(f"Decompiled files saved in: {decompiled_path}")
+    # Start the decompilation process
+    process = subprocess.Popen(['java', '-jar', APKTOOL_PATH, 'd', apk_path, '-o', decompiled_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+
+    pbar = None
+
+    while True:
+        output = process.stdout.readline().strip()
+        if output:
+            match = re.search(r'(\d+)%', output)
+            if match:
+                progress = int(match.group(1))
+                if not pbar:
+                    pbar = tqdm(total=100, desc="Decompiling", unit="%", leave=True)
+                pbar.n = progress
+                pbar.refresh()
+        else:
+            break
+
+    process.wait()
+    if pbar:
+        pbar.close()
+
+    if process.returncode == 0:
+        print("APK decompiled successfully!")
+        print(f"Decompiled files saved in: {decompiled_path}")
+    else:
+        print("Failed to decompile APK.")
+        print(process.stderr.read())
 
     return decompiled_path
+
 
 # Checks a file for matching sensitive keywords
 def check_file_for_sensitive_keywords(file_path):
@@ -109,7 +136,7 @@ def check_apk_for_sensitive_keywords(apk_path, check_all_files=False):
 def main():
     apk_path = input("Enter the path to the APK file: ")
 
-    file_check_option = int(input("Select file check option \n1. Basic Scan(Fast - Check for only important files)\n2. Advance Scan(Slow - Check for All files)"))
+    file_check_option = int(input("Select file check option \n1. Basic Scan(Fast - Check for only important)\n2. Advance Scan(Slow - Check for All files): "))
 
     if file_check_option == 1:
         sensitive_matches = check_apk_for_sensitive_keywords(apk_path)
