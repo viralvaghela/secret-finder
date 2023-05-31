@@ -2,6 +2,8 @@
 
 Secret Finder is a Python tool that revolutionizes the process of identifying hard-coded API secrets, tokens, passwords, and other sensitive information within Android app files.
 
+![image](https://github.com/viralvaghela/secret-finder/assets/34627404/3b377e7a-cd3f-4aef-9722-e43eaed37448)
+
 ## Features
 
 - Decompiles the APK file to extract the app's resources
@@ -12,7 +14,7 @@ Secret Finder is a Python tool that revolutionizes the process of identifying ha
 
 1. Clone the repository:
 
-    ```bash
+   ```bash
    git clone https://github.com/viralvaghela/secret-finder.git
 
 2. Install the dependencies:
@@ -20,13 +22,12 @@ Secret Finder is a Python tool that revolutionizes the process of identifying ha
     ```bash
     pip install -r requirements.txt
 
-## Usage
+## Uage
 
-Run the tool:
-    
-    ```bash
-    python3 secret-finder.py 
-
+3. Run the tool:
+   ```bash
+   python secret_finder.py
+ 
 Enter the path to the APK file when prompted.
 
 Choose the file check option:
