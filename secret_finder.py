@@ -11,7 +11,7 @@ init(autoreset=True)
 APKTOOL_PATH = 'apktool_2.7.0.jar'
 
 # Additional keywords to find sensitive hardcoded values
-SENSITIVE_KEYWORDS = ['token','TOKEN','TOKENS', 'tokens','key', 'password', 'secret', 'SECRET', 'confidential']
+SENSITIVE_KEYWORDS = [' token ','TOKEN','TOKENS', 'tokens',' key ', 'password', 'secret', 'SECRET', 'confidential','_key','_token','api_key']
 
 # Decorator to print tool name with ASCII art
 def print_tool_name(func):
