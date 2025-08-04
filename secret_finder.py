@@ -135,57 +135,69 @@ def generate_html_report(findings, apk_name, scan_time):
         <title>Security Scan Report: {html.escape(apk_name)}</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
             :root {{
-                --bg-color: #f0f2f5; --panel-color: #ffffff; --text-color: #333;
-                --header-color: #24292e; --sidebar-color: #2f363d; --accent-color: #0366d6;
-                --critical-color: #cb2431; --high-color: #d73a49; --medium-color: #f66a0a; --low-color: #0366d6;
-                --border-color: #e1e4e8;
+                --bg-color: #111827; --panel-color: #1F2937; --text-primary: #F9FAFB;
+                --text-secondary: #9CA3AF; --border-color: #374151; --accent-color: #3B82F6;
+                --critical-color: #EF4444; --high-color: #F97316; --medium-color: #FBBF24; --low-color: #22C55E;
+                --critical-glow: rgba(239, 68, 68, 0.2); --high-glow: rgba(249, 115, 22, 0.2);
+                --medium-glow: rgba(251, 191, 36, 0.2); --low-glow: rgba(34, 197, 94, 0.2);
             }}
-            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; margin: 0; background-color: var(--bg-color); color: var(--text-color); display: flex; }}
-            .sidebar {{ width: 240px; background-color: var(--sidebar-color); color: #fff; height: 100vh; position: fixed; display: flex; flex-direction: column; }}
-            .sidebar-header {{ padding: 20px; font-weight: bold; font-size: 1.2em; background-color: var(--header-color); }}
-            .sidebar-nav a {{ display: flex; align-items: center; gap: 10px; padding: 15px 20px; color: #f0f0f0; text-decoration: none; transition: background-color 0.2s; }}
-            .sidebar-nav a:hover, .sidebar-nav a.active {{ background-color: #444c56; }}
-            .main-content {{ margin-left: 240px; width: calc(100% - 240px); padding: 30px; }}
+            body {{ font-family: 'Inter', sans-serif; margin: 0; background-color: var(--bg-color); color: var(--text-primary); display: flex; }}
+            .sidebar {{ width: 260px; background-color: var(--panel-color); border-right: 1px solid var(--border-color); height: 100vh; position: fixed; display: flex; flex-direction: column; transition: width 0.3s; }}
+            .sidebar-header {{ padding: 24px; font-weight: 700; font-size: 1.5em; display: flex; align-items: center; gap: 12px; color: var(--text-primary); }}
+            .sidebar-nav a {{ display: flex; align-items: center; gap: 12px; padding: 16px 24px; color: var(--text-secondary); text-decoration: none; transition: background-color 0.2s, color 0.2s; border-left: 3px solid transparent; }}
+            .sidebar-nav a:hover {{ background-color: rgba(255,255,255,0.05); color: var(--text-primary); }}
+            .sidebar-nav a.active {{ background-color: rgba(59, 130, 246, 0.1); color: var(--accent-color); border-left-color: var(--accent-color); }}
+            .main-content {{ margin-left: 260px; width: calc(100% - 260px); padding: 32px; }}
             .page {{ display: none; }}
             .page.active {{ display: block; animation: fadeIn 0.5s; }}
             @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(10px); }} to {{ opacity: 1; transform: translateY(0); }} }}
-            .panel {{ background: var(--panel-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 24px; margin-bottom: 24px; }}
-            h1, h2 {{ color: var(--header-color); border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-top: 0; }}
-            .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; }}
-            .card {{ padding: 20px; border-radius: 6px; color: #fff; text-align: center; transition: transform 0.2s; }}
-            .card:hover {{ transform: translateY(-5px); }}
-            .card .count {{ font-size: 2.2em; font-weight: 600; }}
-            .card .label {{ font-size: 1em; opacity: 0.9; }}
-            .critical {{ background: var(--critical-color); }} .high {{ background: var(--high-color); }}
-            .medium {{ background: var(--medium-color); }} .low {{ background: var(--low-color); }}
-            .charts-grid {{ display: grid; grid-template-columns: 1fr 2fr; gap: 24px; align-items: center; }}
+            .panel {{ background: var(--panel-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }}
+            h1, h2 {{ color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-top: 0; font-weight: 700; }}
+            h1 {{ font-size: 2em; }} h2 {{ font-size: 1.5em; }}
+            .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; }}
+            .card {{ padding: 24px; border-radius: 12px; color: #fff; position: relative; overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; }}
+            .card:hover {{ transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }}
+            .card .count {{ font-size: 2.5em; font-weight: 700; }}
+            .card .label {{ font-size: 1.1em; opacity: 0.9; margin-top: 8px; }}
+            .critical {{ background: var(--critical-color); box-shadow: 0 0 20px var(--critical-glow); }} .high {{ background: var(--high-color); box-shadow: 0 0 20px var(--high-glow); }}
+            .medium {{ background: var(--medium-color); box-shadow: 0 0 20px var(--medium-glow); }} .low {{ background: var(--low-color); box-shadow: 0 0 20px var(--low-glow); }}
+            .charts-grid {{ display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px; align-items: center; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-            th, td {{ padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border-color); }}
-            th {{ background-color: #f6f8fa; cursor: pointer; }}
-            tr:hover {{ background-color: #f6f8fa; }}
-            .severity-cell span {{ padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; color: #fff; }}
+            th, td {{ padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border-color); }}
+            th {{ background-color: #2a3647; cursor: pointer; font-weight: 600; color: var(--text-secondary); }}
+            tbody tr {{ transition: background-color 0.2s; }}
+            tbody tr:hover {{ background-color: #2a3647; }}
+            .severity-cell span {{ padding: 5px 12px; border-radius: 9999px; font-size: 0.85em; font-weight: 600; color: #fff; }}
             .sev-Critical {{ background-color: var(--critical-color); }} .sev-High {{ background-color: var(--high-color); }}
             .sev-Medium {{ background-color: var(--medium-color); }} .sev-Low {{ background-color: var(--low-color); }}
-            code {{ background-color: #f6f8fa; padding: 3px 6px; border-radius: 4px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; font-size: 0.9em; }}
-            .actions button {{ background: none; border: 1px solid var(--border-color); border-radius: 4px; padding: 5px 8px; cursor: pointer; transition: background-color 0.2s; }}
-            .actions button:hover {{ background-color: #f3f4f6; }}
-            .modal {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }}
-            .modal-content {{ background: #fff; padding: 30px; border-radius: 6px; width: 80%; max-width: 800px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }}
-            .modal-header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 15px; }}
-            .modal-header h3 {{ margin: 0; }}
-            .close-button {{ background: none; border: none; font-size: 1.5em; cursor: pointer; }}
-            .code-context {{ background: #24292e; color: #f0f0f0; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; }}
-            .code-context .highlight {{ background-color: #f66a0a; color: #fff; padding: 2px; border-radius: 3px; }}
+            code {{ background-color: #374151; padding: 4px 8px; border-radius: 6px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; font-size: 0.9em; color: #E5E7EB; }}
+            .actions button {{ background: #374151; border: none; border-radius: 6px; padding: 8px; cursor: pointer; transition: background-color 0.2s; color: var(--text-secondary); }}
+            .actions button:hover {{ background-color: #4B5563; color: var(--text-primary); }}
+            .modal {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(5px); }}
+            .modal-content {{ background: var(--panel-color); padding: 32px; border-radius: 12px; width: 80%; max-width: 900px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); }}
+            .modal-header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 16px; }}
+            .modal-header h3 {{ margin: 0; font-size: 1.25em; }}
+            .close-button {{ background: none; border: none; font-size: 1.8em; cursor: pointer; color: var(--text-secondary); transition: color 0.2s; }}
+            .close-button:hover {{ color: var(--text-primary); }}
+            #modalFilePath {{ font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; color: var(--text-secondary); margin-bottom: 16px; }}
+            .code-context {{ background: #111827; color: #D1D5DB; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; }}
+            .code-context .highlight {{ background-color: rgba(249, 115, 22, 0.3); color: #FDBA74; padding: 2px 4px; border-radius: 4px; }}
             .code-context code {{ color: inherit; background: none; padding: 0; }}
         </style>
     </head>
     <body>
         <div class="sidebar">
-            <div class="sidebar-header">Secret Finder</div>
+            <div class="sidebar-header">
+                <i data-feather="shield"></i>
+                <span>Secret Finder</span>
+            </div>
             <nav class="sidebar-nav">
-                <a href="#dashboard" class="nav-link active" onclick="showPage('dashboard', this)"><i data-feather="home"></i> Dashboard</a>
+                <a href="#dashboard" class="nav-link active" onclick="showPage('dashboard', this)"><i data-feather="layout"></i> Dashboard</a>
                 <a href="#findings" class="nav-link" onclick="showPage('findings', this)"><i data-feather="search"></i> Findings</a>
             </nav>
         </div>
@@ -194,7 +206,7 @@ def generate_html_report(findings, apk_name, scan_time):
             <div id="dashboard" class="page active">
                 <div class="panel">
                     <h1>Dashboard</h1>
-                    <p><strong>Target:</strong> {html.escape(apk_name)} | <strong>Scan Duration:</strong> {scan_time:.2f}s</p>
+                    <p style="color: var(--text-secondary);"><strong>Target:</strong> {html.escape(apk_name)} | <strong>Scan Duration:</strong> {scan_time:.2f}s | <strong>Report Generated:</strong> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
                 </div>
                 <div class="panel">
                     <h2>Scan Summary</h2>
@@ -222,7 +234,7 @@ def generate_html_report(findings, apk_name, scan_time):
                             <tr>
                                 <th data-sort="severity">Severity</th>
                                 <th data-sort="name">Finding Type</th>
-                                <th data-sort="secret">Secret</th>
+                                <th data-sort="secret">Secret (Preview)</th>
                                 <th data-sort="file_path">Location</th>
                                 <th>Actions</th>
                             </tr>
@@ -239,7 +251,7 @@ def generate_html_report(findings, apk_name, scan_time):
                     <h3>Code Context</h3>
                     <button class="close-button" onclick="closeModal()">&times;</button>
                 </div>
-                <div id="modalFilePath" class="filepath"></div>
+                <div id="modalFilePath"></div>
                 <pre class="code-context"><code id="modalCodeContext"></code></pre>
             </div>
         </div>
@@ -258,16 +270,20 @@ def generate_html_report(findings, apk_name, scan_time):
             }}
 
             // --- Charting ---
+            Chart.defaults.color = '#9CA3AF';
+            Chart.defaults.borderColor = '#374151';
+
             new Chart(document.getElementById('severityChart'), {{
                 type: 'doughnut',
                 data: {{
                     labels: Object.keys(severityDistribution),
                     datasets: [{{
                         data: Object.values(severityDistribution),
-                        backgroundColor: ['#cb2431', '#d73a49', '#f66a0a', '#0366d6'],
+                        backgroundColor: ['#EF4444', '#F97316', '#FBBF24', '#22C55E'],
+                        borderWidth: 0,
                     }}]
                 }},
-                options: {{ responsive: true, plugins: {{ legend: {{ position: 'top' }}, title: {{ display: true, text: 'Findings by Severity' }} }} }}
+                options: {{ responsive: true, plugins: {{ legend: {{ position: 'bottom', labels: {{ padding: 20 }} }}, title: {{ display: true, text: 'Findings by Severity', font: {{ size: 16, weight: '600' }}, padding: {{ bottom: 20 }} }} }} }}
             }});
 
             new Chart(document.getElementById('typeChart'), {{
@@ -277,10 +293,12 @@ def generate_html_report(findings, apk_name, scan_time):
                     datasets: [{{
                         label: 'Finding Count',
                         data: Object.values(topFindingTypes),
-                        backgroundColor: '#0366d6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                        borderColor: '#3B82F6',
+                        borderWidth: 1,
                     }}]
                 }},
-                options: {{ indexAxis: 'y', responsive: true, plugins: {{ legend: {{ display: false }}, title: {{ display: true, text: 'Top 5 Finding Types' }} }} }}
+                options: {{ indexAxis: 'y', responsive: true, plugins: {{ legend: {{ display: false }}, title: {{ display: true, text: 'Top 5 Finding Types', font: {{ size: 16, weight: '600' }}, padding: {{ bottom: 20 }} }} }}, scales: {{ y: {{ ticks: {{ color: '#D1D5DB' }} }}, x: {{ ticks: {{ color: '#D1D5DB' }} }} }} }}
             }});
             
             // --- Table & Interactivity ---
@@ -298,8 +316,8 @@ def generate_html_report(findings, apk_name, scan_time):
                             <td><code>${{f.secret.length > 50 ? f.secret.substring(0, 50) + '...' : f.secret}}</code></td>
                             <td class="filepath">${{f.file_path.split(/[\\\\/]/).pop()}}</td>
                             <td class="actions">
-                                <button onclick="copyToClipboard('${{f.secret.replace(/'/g, "\\'")}}', this)"><i data-feather="copy"></i></button>
-                                <button onclick="showModal(${{index}})"><i data-feather="code"></i></button>
+                                <button onclick="copyToClipboard('${{f.secret.replace(/'/g, "\\'")}}', this)" title="Copy Secret"><i data-feather="copy"></i></button>
+                                <button onclick="showModal(${{index}})" title="View Context"><i data-feather="code"></i></button>
                             </td>
                         </tr>
                     `;
@@ -357,7 +375,7 @@ def generate_html_report(findings, apk_name, scan_time):
 
             // --- Initial Load ---
             document.addEventListener('DOMContentLoaded', () => {{
-                renderTable(findingsData);
+                sortData('severity'); // Initially sort by severity
                 feather.replace();
                 document.querySelector('.nav-link.active').click();
             }});
@@ -377,13 +395,13 @@ def print_tool_name(func):
     def wrapper(*args, **kwargs):
         print(r'''
   /$$$$$$                                                 /$$            /$$$$$$$$ /$$                      /$$
- /$$__  $$                                               | $$           | $$_____/|__/                     | $$
-| $$  \__/  /$$$$$$   /$$$$$$$  /$$$$$$   /$$$$$$  /$$$$$$ | $$           | $$       /$$ /$$$$$$$   /$$$$$$$  /$$$$$$   /$$$$$$
-|  $$$$$$  /$$__  $$ /$$_____/ /$$__  $$ /$$__  $$|_  $$_/          | $$$$$    | $$| $$__  $$ /$$__  $$ /$$__  $$ /$$__  $$
- \____  $$| $$$$$$$$| $$      | $$  \__/| $$$$$$$$  | $$            | $$__/    | $$| $$  \ $$| $$  | $$| $$$$$$$$| $$  \__/
- /$$  \ $$| $$_____/| $$      | $$      | $$_____/  | $$ /$$         | $$       | $$| $$  | $$| $$  | $$| $$_____/| $$
-|  $$$$$$/|  $$$$$$$|  $$$$$$$| $$      |  $$$$$$$  |  $$$$/         | $$       | $$| $$  | $$|  $$$$$$$|  $$$$$$$| $$
- \______/  \_______/ \_______/|__/       \_______/   \___/          |__/       |__/|__/  |__/ \_______/ \_______/|__/
+ /$$__  $$                                               | $$          |$$_____/|__/                     | $$
+| $$  \__/  /$$$$$$   /$$$$$$$  /$$$$$$   /$$$$$$  /$$$$$$ | $$          | $$       /$$ /$$$$$$$   /$$$$$$$  /$$$$$$   /$$$$$$
+|  $$$$$$  /$$__  $$ /$$_____/ /$$__  $$ /$$__  $$|_  $$_/            | $$$$$    | $$| $$__  $$ /$$__  $$ /$$__  $$ /$$__  $$
+ \____  $$| $$$$$$$$| $$      | $$  \__/| $$$$$$$$  | $$              | $$__/    | $$| $$  \ $$| $$  | $$| $$$$$$$$| $$  \__/
+ /$$  \ $$| $$_____/| $$      | $$      | $$_____/  | $$ /$$          | $$       | $$| $$  | $$| $$  | $$| $$_____/| $$
+|  $$$$$$/|  $$$$$$$|  $$$$$$$| $$      |  $$$$$$$  |  $$$$/          | $$       | $$| $$  | $$|  $$$$$$$|  $$$$$$$| $$
+ \______/  \_______/ \_______/|__/       \_______/   \___/           |__/       |__/|__/  |__/ \_______/ \_______/|__/
         github.com/viralvaghela
         ''')
         print("Welcome to the Secret Finder!")
