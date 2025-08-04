@@ -78,49 +78,88 @@ SENSITIVE_PATTERNS = {
 
 REMEDIATIONS = {
     "Default": """
+        <h4>Risk:</h4><p>Hardcoding sensitive information in a mobile application is highly insecure. Since APKs can be easily decompiled, any embedded secret can be extracted by malicious actors.</p>
         <h4>General Best Practices:</h4>
         <ul>
-            <li><strong>Never hardcode secrets in client-side code.</strong> Mobile applications can be easily decompiled and inspected.</li>
-            <li>Store secrets on a secure, backend server and have the application fetch them at runtime via a secure, authenticated API call.</li>
-            <li>Use the <a href="https://developer.android.com/topic/security/data" target="_blank">Android Keystore system</a> for storing cryptographic keys on the device.</li>
-            <li>For API keys that must be in the app, use obfuscation tools like ProGuard/R8 in combination with storing keys in `build.gradle` or `local.properties`.</li>
-            <li>Regularly rotate all keys and credentials.</li>
+            <li><strong>Never hardcode secrets in client-side code.</strong> This is the cardinal rule of mobile application security.</li>
+            <li><strong>Backend Proxy:</strong> Store secrets on a secure backend server. The application should make authenticated API calls to this server, which then uses the secrets to communicate with other services.</li>
+            <li><strong>Android Keystore:</strong> Use the <a href="https://developer.android.com/topic/security/data" target="_blank">Android Keystore system</a> for storing cryptographic keys securely on the device.</li>
+            <li><strong>Build-time Injection:</strong> For keys that must be in the app, inject them at build time from a secure location (like `local.properties` or environment variables) that is not checked into version control. Use tools like ProGuard/R8 to obfuscate them.</li>
+            <li><strong>Key Rotation:</strong> Implement a regular key rotation policy for all credentials.</li>
         </ul>
     """,
     "Private Key": """
-        <h4>Risk:</h4><p>Private keys are the ultimate secret. If exposed, an attacker can impersonate your service, decrypt sensitive data, and sign malicious code.</p>
+        <h4>Risk:</h4><p>A private key is the most critical type of secret. Its exposure allows an attacker to impersonate your service, decrypt sensitive communications, forge digital signatures, and potentially gain further access to your infrastructure.</p>
         <h4>Remediation:</h4>
         <ol>
-            <li><strong>Immediately revoke the exposed key.</strong></li>
-            <li>Never embed private keys directly in an APK. They should only exist on a secure, access-controlled backend server.</li>
-            <li>The mobile client should communicate with the backend, which then uses the private key for cryptographic operations. The key itself is never sent to the client.</li>
+            <li><strong>Immediately revoke the exposed key</strong> and issue a new one. Update all services that rely on this key.</li>
+            <li>Private keys must <strong>never</strong> be stored on the client-side. They belong on a secure, access-controlled backend server.</li>
+            <li>Refactor your application to perform all cryptographic operations requiring the private key on the backend. The mobile client should only ever handle public keys or data signed by the backend.</li>
         </ol>
     """,
     "AWS Secret Access Key": """
-        <h4>Risk:</h4><p>An AWS Secret Access Key provides programmatic access to your AWS account. An attacker with this key can create, modify, and delete resources, leading to significant financial loss and data breaches.</p>
+        <h4>Risk:</h4><p>This key provides programmatic access to your AWS account. An attacker can use it to manage, access, or delete your AWS resources (EC2, S3, RDS, etc.), leading to catastrophic data breaches and financial costs.</p>
         <h4>Remediation:</h4>
         <ol>
-            <li><strong>Immediately go to the IAM console in AWS and deactivate or delete the exposed access key.</strong></li>
-            <li>Implement short-term credentials using AWS STS (Security Token Service). The app should authenticate to your backend, which then vends temporary AWS credentials with limited permissions.</li>
-            <li>For direct AWS service access from mobile, use <a href="https://aws.amazon.com/cognito/" target="_blank">Amazon Cognito Identity Pools</a>.</li>
+            <li><strong>Immediately go to the IAM console in AWS and deactivate or delete the exposed access key.</strong> This is the most critical first step.</li>
+            <li>Audit all activity associated with the compromised key using AWS CloudTrail to identify any unauthorized actions.</li>
+            <li><strong>Never use long-term IAM user credentials in a mobile app.</strong> Instead, use temporary credentials vended by <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html" target="_blank">AWS STS (Security Token Service)</a>.</li>
+            <li>The recommended approach for mobile is to use <a href="https://aws.amazon.com/cognito/" target="_blank">Amazon Cognito Identity Pools</a>, which can provide temporary, limited-privilege AWS credentials to your app users.</li>
+        </ol>
+    """,
+    "GitHub Token": """
+        <h4>Risk:</h4><p>A GitHub Personal Access Token (PAT) can be used to perform Git operations and make API requests on behalf of your GitHub account. An attacker could read private source code, push malicious code, delete repositories, or access other integrated services.</p>
+        <h4>Remediation:</h4>
+        <ol>
+            <li><strong>Immediately revoke the token</strong> in your GitHub account under <a href="https://github.com/settings/tokens" target="_blank">Developer settings -> Personal access tokens</a>.</li>
+            <li>Audit your GitHub account's security log for any suspicious activity performed using the compromised token.</li>
+            <li>Use <a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-fine-grained-personal-access-token" target="_blank">fine-grained PATs</a> with the minimum required scopes and a short expiration date.</li>
+            <li>For CI/CD or automation, prefer using GitHub Actions secrets or authenticating as a <a href="https://docs.github.com/en/developers/apps" target="_blank">GitHub App</a> rather than a PAT.</li>
+        </ol>
+    """,
+    "Google Cloud API Key": """
+        <h4>Risk:</h4><p>This key grants access to Google Cloud Platform APIs. Depending on its permissions, an attacker could abuse services like Google Maps, Natural Language API, etc., leading to unexpected billing charges.</p>
+        <h4>Remediation:</h4>
+        <ol>
+            <li><strong>Immediately revoke the compromised API key</strong> in the <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a>.</li>
+            <li>When creating new keys, apply <a href="https://cloud.google.com/docs/authentication/api-keys#api_key_restrictions" target="_blank">API key restrictions</a>. At a minimum, restrict the key to your app's package name and SHA-1 certificate fingerprint.</li>
+            <li>For more sensitive operations, do not use an API key. Authenticate using a service account from a secure backend.</li>
+        </ol>
+    """,
+    "Firebase URL": """
+        <h4>Risk:</h4><p>Exposing a Firebase Realtime Database URL is not inherently a vulnerability, but it becomes critical if your Firebase Security Rules are insecure (e.g., allowing public read/write access).</p>
+        <h4>Remediation:</h4>
+        <ol>
+            <li><strong>Audit your Firebase Security Rules immediately.</strong> Ensure that you do not have rules like `".read": "true"` or `".write": "true"` on sensitive data paths.</li>
+            <li>Implement proper user authentication and write rules that grant access only to authenticated and authorized users.</li>
+            <li>Enable and enforce <a href="https://firebase.google.com/docs/app-check" target="_blank">Firebase App Check</a> to ensure that requests originate from your authentic application.</li>
+        </ol>
+    """,
+    "JWT Token": """
+        <h4>Risk:</h4><p>A hardcoded JSON Web Token (JWT) is likely a long-lived token for a service account or test user. An attacker can use this token to impersonate the user/service and access protected API endpoints until the token expires.</p>
+        <h4>Remediation:</h4>
+        <ol>
+            <li>Identify the service that issued the token and revoke it. This may involve logging out a user session, deleting a service account, or adding the token to a deny-list.</li>
+            <li>JWTs should always be short-lived and acquired dynamically through a secure authentication flow (e.g., OAuth 2.0).</li>
+            <li>Implement a secure token refresh mechanism in your application. Store refresh tokens securely, for example, in the Android Keystore.</li>
         </ol>
     """,
     "Password": """
-        <h4>Risk:</h4><p>Hardcoded passwords can grant attackers direct access to user accounts, databases, or third-party services.</p>
+        <h4>Risk:</h4><p>Hardcoded passwords provide a direct entry point for attackers into user accounts, databases, or third-party services, bypassing other security measures.</p>
         <h4>Remediation:</h4>
         <ol>
             <li><strong>Change the password for the affected account immediately.</strong></li>
-            <li>Replace hardcoded passwords with a secure authentication mechanism, such as OAuth 2.0 or token-based authentication (e.g., JWT).</li>
-            <li>Credentials should be entered by the user at runtime and exchanged for a session token.</li>
+            <li>Refactor the code to remove the hardcoded password. Credentials should be provided by the user at runtime and exchanged for a short-lived session token.</li>
+            <li>Never store user passwords directly; always store a securely hashed and salted version (e.g., using Argon2 or bcrypt).</li>
         </ol>
     """,
     "Generic API Key": """
-        <h4>Risk:</h4><p>API keys grant access to third-party services. Exposure can lead to abuse of the service at your expense, or access to sensitive data stored within that service.</p>
+        <h4>Risk:</h4><p>API keys grant access to third-party services. Exposure can lead to abuse of the service at your expense, unauthorized access to your data within that service, or rate-limiting that affects legitimate users.</p>
         <h4>Remediation:</h4>
         <ol>
-            <li><strong>Revoke the exposed API key in the service provider's dashboard immediately.</strong></li>
-            <li>Create a backend proxy. The mobile app makes requests to your server, which then securely adds the API key and forwards the request to the third-party service.</li>
-            <li>If the key must be in the app, use provider-specific features to restrict its use (e.g., by Android package name and SHA-1 certificate fingerprint).</li>
+            <li><strong>Identify the service provider and revoke the exposed API key in their developer dashboard immediately.</strong></li>
+            <li>Implement a backend proxy. The mobile app makes requests to your server, which then securely attaches the API key and forwards the request to the third-party service. This keeps the key off the client.</li>
+            <li>If a key must be on the client, check if the provider allows for restrictions (e.g., by IP address, or by Android package name and SHA-1 certificate fingerprint). Apply the strictest possible restrictions.</li>
         </ol>
     """
 }
@@ -141,7 +180,8 @@ def get_apk_details(apk_path, decompiled_path):
     details = {
         'file_name': os.path.basename(apk_path),
         'file_size': f"{os.path.getsize(apk_path) / (1024*1024):.2f} MB",
-        'md5': '', 'sha1': '', 'sha256': '', 'package_name': 'N/A'
+        'md5': '', 'sha1': '', 'sha256': '', 'package_name': 'N/A',
+        'manifest_findings': []
     }
 
     # Calculate Hashes
@@ -157,17 +197,52 @@ def get_apk_details(apk_path, decompiled_path):
     details['sha1'] = hasher_sha1.hexdigest()
     details['sha256'] = hasher_sha256.hexdigest()
 
-    # Parse AndroidManifest.xml for package name
+    # Parse AndroidManifest.xml
     try:
         manifest_path = os.path.join(decompiled_path, 'AndroidManifest.xml')
         if os.path.exists(manifest_path):
             tree = ET.parse(manifest_path)
             root = tree.getroot()
             details['package_name'] = root.get('package', 'N/A')
+            
+            # Find exported components
+            ns = {'android': 'http://schemas.android.com/apk/res/android'}
+            app = root.find('application')
+            if app is not None:
+                for component_type in ['activity', 'service', 'receiver']:
+                    for component in app.findall(component_type):
+                        exported = component.get(f'{{{ns["android"]}}}exported')
+                        if exported == 'true':
+                            details['manifest_findings'].append({
+                                'type': component.tag.capitalize(),
+                                'name': component.get(f'{{{ns["android"]}}}name'),
+                                'risk': f"This {component.tag} is marked as exported, making it accessible to other apps on the device. This can be a security risk if not handled properly."
+                            })
     except ET.ParseError:
         details['package_name'] = 'Error parsing Manifest'
 
     return details
+
+def calculate_risk_score(findings, manifest_findings):
+    """Calculates a CVSS-like risk score based on findings."""
+    score = 0
+    weights = {"Critical": 10, "High": 7, "Medium": 4, "Low": 1}
+    
+    for f in findings:
+        score += weights.get(f['severity'], 0)
+        
+    # Add weight for exported components
+    score += len(manifest_findings) * 2 # Add 2 points for each exported component
+
+    if score > 100: score = 100 # Cap the score at 100
+    
+    risk_level = "Low"
+    if score >= 90: risk_level = "Critical"
+    elif score >= 70: risk_level = "High"
+    elif score >= 40: risk_level = "Medium"
+    
+    return score, risk_level
+
 
 def generate_html_report(findings, apk_details, scan_time):
     """Generates a professional, interactive HTML dashboard from the scan findings."""
@@ -186,6 +261,8 @@ def generate_html_report(findings, apk_details, scan_time):
         finding_types[f['name']] = finding_types.get(f['name'], 0) + 1
     top_finding_types = dict(sorted(finding_types.items(), key=lambda item: item[1], reverse=True)[:5])
 
+    risk_score, risk_level = calculate_risk_score(findings, apk_details['manifest_findings'])
+
     findings_json = json.dumps([
         {
             'severity': html.escape(f['severity']),
@@ -198,6 +275,7 @@ def generate_html_report(findings, apk_details, scan_time):
     ])
     
     remediations_json = json.dumps(REMEDIATIONS)
+    manifest_findings_json = json.dumps(apk_details['manifest_findings'])
 
     html_template = f"""
     <!DOCTYPE html>
@@ -250,9 +328,9 @@ def generate_html_report(findings, apk_details, scan_time):
             th {{ background-color: #0d1117; cursor: pointer; font-weight: 600; color: var(--text-secondary); }}
             tbody tr {{ transition: background-color 0.2s; }}
             tbody tr:hover {{ background-color: #22272e; }}
-            .severity-cell span {{ padding: 5px 12px; border-radius: 9999px; font-size: 0.85em; font-weight: 600; color: #fff; }}
-            .sev-Critical {{ background-color: var(--critical-color); }} .sev-High {{ background-color: var(--high-color); }}
-            .sev-Medium {{ background-color: var(--medium-color); }} .sev-Low {{ background-color: var(--low-color); }}
+            .severity-cell span, .risk-level-cell span {{ padding: 5px 12px; border-radius: 9999px; font-size: 0.85em; font-weight: 600; color: #fff; }}
+            .sev-Critical, .risk-Critical {{ background-color: var(--critical-color); }} .sev-High, .risk-High {{ background-color: var(--high-color); }}
+            .sev-Medium, .risk-Medium {{ background-color: var(--medium-color); }} .sev-Low, .risk-Low {{ background-color: var(--low-color); }}
             code {{ background-color: #0d1117; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 6px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; font-size: 0.9em; color: #E5E7EB; }}
             .actions button {{ background: #21262d; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; cursor: pointer; transition: background-color 0.2s, color 0.2s; color: var(--text-secondary); }}
             .actions button:hover {{ background-color: #30363d; color: var(--text-primary); }}
@@ -264,9 +342,10 @@ def generate_html_report(findings, apk_details, scan_time):
             #modalFilePath {{ font-family: "SFMono-Regular", Consolas, monospace; color: var(--text-secondary); margin-bottom: 16px; }}
             .code-context {{ background: #0d1117; color: #c9d1d9; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace; border: 1px solid var(--border-color); }}
             .code-context .highlight {{ background-color: rgba(247, 129, 102, 0.2); color: #f78166; padding: 2px 4px; border-radius: 4px; }}
-            .remediation-section ul, .remediation-section ol {{ padding-left: 20px; }}
+            .remediation-section ul, .remediation-section ol {{ padding-left: 20px; line-height: 1.6; }}
             .remediation-section a {{ color: var(--accent-color); text-decoration: none; }}
             .remediation-section a:hover {{ text-decoration: underline; }}
+            .remediation-section h4 {{ border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-bottom: 12px; }}
         </style>
     </head>
     <body>
@@ -274,7 +353,8 @@ def generate_html_report(findings, apk_details, scan_time):
             <div class="sidebar-header"><i data-feather="shield"></i><span>Secret Finder</span></div>
             <nav class="sidebar-nav">
                 <a href="#dashboard" class="nav-link active" onclick="showPage('dashboard', this)"><i data-feather="layout"></i> Dashboard</a>
-                <a href="#findings" class="nav-link" onclick="showPage('findings', this)"><i data-feather="search"></i> Findings</a>
+                <a href="#findings" class="nav-link" onclick="showPage('findings', this)"><i data-feather="search"></i> Secret Findings</a>
+                <a href="#manifest" class="nav-link" onclick="showPage('manifest', this)"><i data-feather="file-text"></i> Manifest Analysis</a>
             </nav>
         </div>
 
@@ -295,13 +375,19 @@ def generate_html_report(findings, apk_details, scan_time):
                     </div>
                     <div class="panel">
                         <h2>Executive Summary</h2>
-                        <p>Scan completed on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} in {scan_time:.2f} seconds. A total of <strong>{len(findings)}</strong> potential secrets were discovered.</p>
-                        <div class="grid-container" style="grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
-                            <div class="card critical" style="padding: 16px;"><div class="count">{critical_count}</div><div class="label">Critical</div></div>
-                            <div class="card high" style="padding: 16px;"><div class="count">{high_count}</div><div class="label">High</div></div>
-                            <div class="card medium" style="padding: 16px;"><div class="count">{medium_count}</div><div class="label">Medium</div></div>
-                            <div class="card low" style="padding: 16px;"><div class="count">{low_count}</div><div class="label">Low</div></div>
+                        <p>Scan completed on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} in {scan_time:.2f} seconds. A total of <strong>{len(findings)}</strong> potential secrets and <strong>{len(apk_details['manifest_findings'])}</strong> manifest issues were discovered.</p>
+                        <div style="text-align: center; margin-top: 16px;">
+                            <h3>Overall Risk Score: <span class="risk-level-cell" style="font-size: 1.2em; padding: 8px 16px;"><span class="risk-{risk_level}">{risk_score}/100</span></span></h3>
                         </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <h2>Findings by Severity</h2>
+                    <div class="grid-container" style="grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px;">
+                        <div class="card critical" style="padding: 16px;"><div class="count">{critical_count}</div><div class="label">Critical</div></div>
+                        <div class="card high" style="padding: 16px;"><div class="count">{high_count}</div><div class="label">High</div></div>
+                        <div class="card medium" style="padding: 16px;"><div class="count">{medium_count}</div><div class="label">Medium</div></div>
+                        <div class="card low" style="padding: 16px;"><div class="count">{low_count}</div><div class="label">Low</div></div>
                     </div>
                 </div>
                 <div class="panel">
@@ -315,9 +401,20 @@ def generate_html_report(findings, apk_details, scan_time):
 
             <div id="findings" class="page">
                 <div class="panel">
-                    <h2>Findings ({len(findings)})</h2>
+                    <h2>Secret Findings ({len(findings)})</h2>
                     <table id="findingsTable">
                         <thead><tr><th data-sort="severity">Severity</th><th data-sort="name">Finding Type</th><th data-sort="secret">Secret (Preview)</th><th data-sort="file_path">Location</th><th>Actions</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="manifest" class="page">
+                <div class="panel">
+                    <h2>Manifest Analysis ({len(apk_details['manifest_findings'])})</h2>
+                    <p>This section lists potentially insecure components found in the <code>AndroidManifest.xml</code>. Exported components can be accessed by other applications on the device, potentially leading to vulnerabilities if they are not properly secured.</p>
+                    <table id="manifestTable">
+                        <thead><tr><th>Component Type</th><th>Component Name</th><th>Risk</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -336,7 +433,7 @@ def generate_html_report(findings, apk_details, scan_time):
                 <div id="modalFilePath"></div>
                 <h3 style="margin-top: 24px;">Code Context</h3>
                 <pre class="code-context"><code id="modalCodeContext"></code></pre>
-                <h3 style="margin-top: 24px;">Remediation</h3>
+                <h3 style="margin-top: 24px;">Remediation Guidance</h3>
                 <div id="modalRemediation" class="remediation-section"></div>
             </div>
         </div>
@@ -344,6 +441,7 @@ def generate_html_report(findings, apk_details, scan_time):
         <script>
             const findingsData = {findings_json};
             const remediations = {remediations_json};
+            const manifestData = {manifest_findings_json};
             const severityDistribution = {json.dumps(severity_distribution)};
             const topFindingTypes = {json.dumps(top_finding_types)};
 
@@ -389,6 +487,20 @@ def generate_html_report(findings, apk_details, scan_time):
                 feather.replace({{ width: '18', height: '18' }});
             }}
 
+            function renderManifestTable(data) {{
+                const manifestTableBody = document.querySelector('#manifestTable tbody');
+                manifestTableBody.innerHTML = '';
+                data.forEach(f => {{
+                    const row = `
+                        <tr>
+                            <td><span class="severity-cell sev-Medium">${{f.type}}</span></td>
+                            <td><code>${{f.name}}</code></td>
+                            <td>${{f.risk}}</td>
+                        </tr>`;
+                    manifestTableBody.innerHTML += row;
+                }});
+            }}
+
             function sortData(column) {{
                 const order = (currentSort.column === column && currentSort.order === 'asc') ? 'desc' : 'asc';
                 currentSort = {{ column, order }};
@@ -419,6 +531,7 @@ def generate_html_report(findings, apk_details, scan_time):
 
             document.addEventListener('DOMContentLoaded', () => {{
                 sortData('severity');
+                renderManifestTable(manifestData);
                 feather.replace({{ width: '20', height: '20' }});
                 document.querySelector('.nav-link.active').click();
             }});
@@ -431,6 +544,25 @@ def generate_html_report(findings, apk_details, scan_time):
         f.write(html_template)
     
     print(Fore.GREEN + f"\nHTML dashboard generated successfully: {report_name}")
+
+    # Ask to generate JSON report
+    generate_json = input("Do you want to generate a JSON report as well? (y/n): ").lower()
+    if generate_json == 'y':
+        json_report_name = f"security_report_{apk_details['file_name']}.json"
+        report_data = {
+            "apk_details": apk_details,
+            "scan_summary": {
+                "scan_time_seconds": round(scan_time, 2),
+                "total_secrets_found": len(findings),
+                "risk_score": risk_score,
+                "risk_level": risk_level,
+                "findings_by_severity": severity_distribution
+            },
+            "findings": findings
+        }
+        with open(json_report_name, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, indent=4)
+        print(Fore.GREEN + f"JSON report generated successfully: {json_report_name}")
 
 
 def print_tool_name(func):
@@ -581,10 +713,10 @@ def main():
             print("Invalid option selected. Please try again.")
             return
 
-        if not sensitive_matches:
-            print(Fore.GREEN + "\nScan complete. No sensitive information found based on the defined patterns.")
+        if not sensitive_matches and not apk_details.get('manifest_findings'):
+            print(Fore.GREEN + "\nScan complete. No sensitive information or manifest issues found.")
         else:
-            print(Fore.YELLOW + f"\nScan complete. Found {len(sensitive_matches)} potential secrets.")
+            print(Fore.YELLOW + f"\nScan complete. Found {len(sensitive_matches)} potential secrets and {len(apk_details.get('manifest_findings', []))} manifest issues.")
             sorted_matches = sorted(sensitive_matches, key=lambda x: ["Critical", "High", "Medium", "Low"].index(x['severity']))
             generate_html_report(sorted_matches, apk_details, scan_time)
 
