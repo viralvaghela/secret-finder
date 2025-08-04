@@ -9,6 +9,8 @@ from colorama import init, Fore
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 import html
+import hashlib
+import xml.etree.ElementTree as ET
 
 # Initialize colorama
 init(autoreset=True)
@@ -74,6 +76,54 @@ SENSITIVE_PATTERNS = {
     "S3 Bucket URL": {"Regex": re.compile(r'\b([a-zA-Z0-9._-]+\.s3\.amazonaws\.com)\b'), "Severity": "Low"},
 }
 
+REMEDIATIONS = {
+    "Default": """
+        <h4>General Best Practices:</h4>
+        <ul>
+            <li><strong>Never hardcode secrets in client-side code.</strong> Mobile applications can be easily decompiled and inspected.</li>
+            <li>Store secrets on a secure, backend server and have the application fetch them at runtime via a secure, authenticated API call.</li>
+            <li>Use the <a href="https://developer.android.com/topic/security/data" target="_blank">Android Keystore system</a> for storing cryptographic keys on the device.</li>
+            <li>For API keys that must be in the app, use obfuscation tools like ProGuard/R8 in combination with storing keys in `build.gradle` or `local.properties`.</li>
+            <li>Regularly rotate all keys and credentials.</li>
+        </ul>
+    """,
+    "Private Key": """
+        <h4>Risk:</h4><p>Private keys are the ultimate secret. If exposed, an attacker can impersonate your service, decrypt sensitive data, and sign malicious code.</p>
+        <h4>Remediation:</h4>
+        <ol>
+            <li><strong>Immediately revoke the exposed key.</strong></li>
+            <li>Never embed private keys directly in an APK. They should only exist on a secure, access-controlled backend server.</li>
+            <li>The mobile client should communicate with the backend, which then uses the private key for cryptographic operations. The key itself is never sent to the client.</li>
+        </ol>
+    """,
+    "AWS Secret Access Key": """
+        <h4>Risk:</h4><p>An AWS Secret Access Key provides programmatic access to your AWS account. An attacker with this key can create, modify, and delete resources, leading to significant financial loss and data breaches.</p>
+        <h4>Remediation:</h4>
+        <ol>
+            <li><strong>Immediately go to the IAM console in AWS and deactivate or delete the exposed access key.</strong></li>
+            <li>Implement short-term credentials using AWS STS (Security Token Service). The app should authenticate to your backend, which then vends temporary AWS credentials with limited permissions.</li>
+            <li>For direct AWS service access from mobile, use <a href="https://aws.amazon.com/cognito/" target="_blank">Amazon Cognito Identity Pools</a>.</li>
+        </ol>
+    """,
+    "Password": """
+        <h4>Risk:</h4><p>Hardcoded passwords can grant attackers direct access to user accounts, databases, or third-party services.</p>
+        <h4>Remediation:</h4>
+        <ol>
+            <li><strong>Change the password for the affected account immediately.</strong></li>
+            <li>Replace hardcoded passwords with a secure authentication mechanism, such as OAuth 2.0 or token-based authentication (e.g., JWT).</li>
+            <li>Credentials should be entered by the user at runtime and exchanged for a session token.</li>
+        </ol>
+    """,
+    "Generic API Key": """
+        <h4>Risk:</h4><p>API keys grant access to third-party services. Exposure can lead to abuse of the service at your expense, or access to sensitive data stored within that service.</p>
+        <h4>Remediation:</h4>
+        <ol>
+            <li><strong>Revoke the exposed API key in the service provider's dashboard immediately.</strong></li>
+            <li>Create a backend proxy. The mobile app makes requests to your server, which then securely adds the API key and forwards the request to the third-party service.</li>
+            <li>If the key must be in the app, use provider-specific features to restrict its use (e.g., by Android package name and SHA-1 certificate fingerprint).</li>
+        </ol>
+    """
+}
 
 def build_combined_regex():
     """Combines all regex patterns into one for efficient scanning."""
@@ -81,40 +131,61 @@ def build_combined_regex():
     all_patterns = []
     for i, (name, pattern_info) in enumerate(SENSITIVE_PATTERNS.items()):
         group_name = f'group{i}'
-        # Each sub-pattern is wrapped in a named group.
         all_patterns.append(f'(?P<{group_name}>{pattern_info["Regex"].pattern})')
         name_map[group_name] = {"name": name, "severity": pattern_info["Severity"]}
-    
-    # The IGNORECASE flag is removed from here; case-insensitivity is handled by `(?i)` in individual patterns.
     combined_regex = re.compile('|'.join(all_patterns))
     return combined_regex, name_map
 
+def get_apk_details(apk_path, decompiled_path):
+    """Calculates file hashes and extracts metadata from the APK."""
+    details = {
+        'file_name': os.path.basename(apk_path),
+        'file_size': f"{os.path.getsize(apk_path) / (1024*1024):.2f} MB",
+        'md5': '', 'sha1': '', 'sha256': '', 'package_name': 'N/A'
+    }
 
-def generate_html_report(findings, apk_name, scan_time):
+    # Calculate Hashes
+    hasher_md5 = hashlib.md5()
+    hasher_sha1 = hashlib.sha1()
+    hasher_sha256 = hashlib.sha256()
+    with open(apk_path, 'rb') as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hasher_md5.update(chunk)
+            hasher_sha1.update(chunk)
+            hasher_sha256.update(chunk)
+    details['md5'] = hasher_md5.hexdigest()
+    details['sha1'] = hasher_sha1.hexdigest()
+    details['sha256'] = hasher_sha256.hexdigest()
+
+    # Parse AndroidManifest.xml for package name
+    try:
+        manifest_path = os.path.join(decompiled_path, 'AndroidManifest.xml')
+        if os.path.exists(manifest_path):
+            tree = ET.parse(manifest_path)
+            root = tree.getroot()
+            details['package_name'] = root.get('package', 'N/A')
+    except ET.ParseError:
+        details['package_name'] = 'Error parsing Manifest'
+
+    return details
+
+def generate_html_report(findings, apk_details, scan_time):
     """Generates a professional, interactive HTML dashboard from the scan findings."""
-    report_name = f"security_report_{apk_name}.html"
+    report_name = f"security_report_{apk_details['file_name']}.html"
     
-    # Process findings for the report
     severities = [finding['severity'] for finding in findings]
     critical_count = severities.count('Critical')
     high_count = severities.count('High')
     medium_count = severities.count('Medium')
     low_count = severities.count('Low')
 
-    # Data for charts
-    severity_distribution = {
-        'Critical': critical_count,
-        'High': high_count,
-        'Medium': medium_count,
-        'Low': low_count
-    }
-
+    severity_distribution = {'Critical': critical_count, 'High': high_count, 'Medium': medium_count, 'Low': low_count}
+    
     finding_types = {}
     for f in findings:
         finding_types[f['name']] = finding_types.get(f['name'], 0) + 1
     top_finding_types = dict(sorted(finding_types.items(), key=lambda item: item[1], reverse=True)[:5])
 
-    # Convert findings to JSON for embedding in the report
     findings_json = json.dumps([
         {
             'severity': html.escape(f['severity']),
@@ -125,6 +196,8 @@ def generate_html_report(findings, apk_name, scan_time):
             'context': html.escape(f['context'])
         } for f in findings
     ])
+    
+    remediations_json = json.dumps(REMEDIATIONS)
 
     html_template = f"""
     <!DOCTYPE html>
@@ -132,70 +205,73 @@ def generate_html_report(findings, apk_name, scan_time):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Security Scan Report: {html.escape(apk_name)}</title>
+        <title>Security Scan Report: {html.escape(apk_details['file_name'])}</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
             :root {{
-                --bg-color: #111827; --panel-color: #1F2937; --text-primary: #F9FAFB;
-                --text-secondary: #9CA3AF; --border-color: #374151; --accent-color: #3B82F6;
-                --critical-color: #EF4444; --high-color: #F97316; --medium-color: #FBBF24; --low-color: #22C55E;
-                --critical-glow: rgba(239, 68, 68, 0.2); --high-glow: rgba(249, 115, 22, 0.2);
-                --medium-glow: rgba(251, 191, 36, 0.2); --low-glow: rgba(34, 197, 94, 0.2);
+                --bg-color: #0d1117; --panel-color: #161b22; --text-primary: #c9d1d9;
+                --text-secondary: #8b949e; --border-color: #30363d; --accent-color: #58a6ff;
+                --critical-color: #f85149; --high-color: #f78166; --medium-color: #d29922; --low-color: #3fb950;
+                --critical-glow: rgba(248, 81, 73, 0.15); --high-glow: rgba(247, 129, 102, 0.15);
+                --medium-glow: rgba(210, 153, 34, 0.15); --low-glow: rgba(63, 185, 80, 0.15);
             }}
-            body {{ font-family: 'Inter', sans-serif; margin: 0; background-color: var(--bg-color); color: var(--text-primary); display: flex; }}
-            .sidebar {{ width: 260px; background-color: var(--panel-color); border-right: 1px solid var(--border-color); height: 100vh; position: fixed; display: flex; flex-direction: column; transition: width 0.3s; }}
-            .sidebar-header {{ padding: 24px; font-weight: 700; font-size: 1.5em; display: flex; align-items: center; gap: 12px; color: var(--text-primary); }}
-            .sidebar-nav a {{ display: flex; align-items: center; gap: 12px; padding: 16px 24px; color: var(--text-secondary); text-decoration: none; transition: background-color 0.2s, color 0.2s; border-left: 3px solid transparent; }}
-            .sidebar-nav a:hover {{ background-color: rgba(255,255,255,0.05); color: var(--text-primary); }}
-            .sidebar-nav a.active {{ background-color: rgba(59, 130, 246, 0.1); color: var(--accent-color); border-left-color: var(--accent-color); }}
-            .main-content {{ margin-left: 260px; width: calc(100% - 260px); padding: 32px; }}
+            body {{ font-family: 'Poppins', sans-serif; margin: 0; background-color: var(--bg-color); color: var(--text-primary); display: flex; }}
+            .sidebar {{ width: 280px; background-color: var(--bg-color); border-right: 1px solid var(--border-color); height: 100vh; position: fixed; display: flex; flex-direction: column; }}
+            .sidebar-header {{ padding: 24px; font-weight: 700; font-size: 1.5em; display: flex; align-items: center; gap: 12px; color: var(--text-primary); border-bottom: 1px solid var(--border-color); }}
+            .sidebar-nav a {{ display: flex; align-items: center; gap: 12px; padding: 16px 24px; color: var(--text-secondary); text-decoration: none; transition: background-color 0.2s, color 0.2s; border-left: 3px solid transparent; font-weight: 500; }}
+            .sidebar-nav a:hover {{ background-color: var(--panel-color); color: var(--text-primary); }}
+            .sidebar-nav a.active {{ color: var(--accent-color); border-left-color: var(--accent-color); background-color: var(--panel-color); }}
+            .main-content {{ margin-left: 280px; width: calc(100% - 280px); padding: 32px; }}
             .page {{ display: none; }}
             .page.active {{ display: block; animation: fadeIn 0.5s; }}
             @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(10px); }} to {{ opacity: 1; transform: translateY(0); }} }}
-            .panel {{ background: var(--panel-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }}
-            h1, h2 {{ color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-top: 0; font-weight: 700; }}
-            h1 {{ font-size: 2em; }} h2 {{ font-size: 1.5em; }}
-            .summary-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; }}
-            .card {{ padding: 24px; border-radius: 12px; color: #fff; position: relative; overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; }}
-            .card:hover {{ transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }}
+            .panel {{ background: var(--panel-color); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; margin-bottom: 24px; }}
+            h1, h2, h3 {{ color: var(--text-primary); margin-top: 0; font-weight: 700; }}
+            h1 {{ font-size: 2em; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; }}
+            h2 {{ font-size: 1.5em; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; }}
+            h3 {{ font-size: 1.25em; }}
+            .grid-container {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }}
+            .card {{ padding: 24px; border-radius: 12px; color: #fff; position: relative; overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease; border: 1px solid transparent; text-align: center; }}
+            .card:hover {{ transform: translateY(-5px); }}
             .card .count {{ font-size: 2.5em; font-weight: 700; }}
             .card .label {{ font-size: 1.1em; opacity: 0.9; margin-top: 8px; }}
-            .critical {{ background: var(--critical-color); box-shadow: 0 0 20px var(--critical-glow); }} .high {{ background: var(--high-color); box-shadow: 0 0 20px var(--high-glow); }}
-            .medium {{ background: var(--medium-color); box-shadow: 0 0 20px var(--medium-glow); }} .low {{ background: var(--low-color); box-shadow: 0 0 20px var(--low-glow); }}
-            .charts-grid {{ display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px; align-items: center; }}
+            .critical {{ background: linear-gradient(145deg, #f85149, #d83636); border-color: #f85149; box-shadow: 0 0 20px var(--critical-glow); }}
+            .high {{ background: linear-gradient(145deg, #f78166, #e26a4a); border-color: #f78166; box-shadow: 0 0 20px var(--high-glow); }}
+            .medium {{ background: linear-gradient(145deg, #d29922, #b5831a); border-color: #d29922; box-shadow: 0 0 20px var(--medium-glow); }}
+            .low {{ background: linear-gradient(145deg, #3fb950, #34a84a); border-color: #3fb950; box-shadow: 0 0 20px var(--low-glow); }}
+            .apk-details dt {{ font-weight: 600; color: var(--text-secondary); float: left; width: 100px; clear: left; }}
+            .apk-details dd {{ margin-left: 110px; font-family: "SFMono-Regular", Consolas, monospace; color: var(--text-primary); word-wrap: break-word; }}
             table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
             th, td {{ padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border-color); }}
-            th {{ background-color: #2a3647; cursor: pointer; font-weight: 600; color: var(--text-secondary); }}
+            th {{ background-color: #0d1117; cursor: pointer; font-weight: 600; color: var(--text-secondary); }}
             tbody tr {{ transition: background-color 0.2s; }}
-            tbody tr:hover {{ background-color: #2a3647; }}
+            tbody tr:hover {{ background-color: #22272e; }}
             .severity-cell span {{ padding: 5px 12px; border-radius: 9999px; font-size: 0.85em; font-weight: 600; color: #fff; }}
             .sev-Critical {{ background-color: var(--critical-color); }} .sev-High {{ background-color: var(--high-color); }}
             .sev-Medium {{ background-color: var(--medium-color); }} .sev-Low {{ background-color: var(--low-color); }}
-            code {{ background-color: #374151; padding: 4px 8px; border-radius: 6px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; font-size: 0.9em; color: #E5E7EB; }}
-            .actions button {{ background: #374151; border: none; border-radius: 6px; padding: 8px; cursor: pointer; transition: background-color 0.2s; color: var(--text-secondary); }}
-            .actions button:hover {{ background-color: #4B5563; color: var(--text-primary); }}
+            code {{ background-color: #0d1117; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 6px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; font-size: 0.9em; color: #E5E7EB; }}
+            .actions button {{ background: #21262d; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; cursor: pointer; transition: background-color 0.2s, color 0.2s; color: var(--text-secondary); }}
+            .actions button:hover {{ background-color: #30363d; color: var(--text-primary); }}
             .modal {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(5px); }}
-            .modal-content {{ background: var(--panel-color); padding: 32px; border-radius: 12px; width: 80%; max-width: 900px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); }}
+            .modal-content {{ background: var(--panel-color); padding: 32px; border-radius: 12px; width: 80%; max-width: 900px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); max-height: 90vh; overflow-y: auto; }}
             .modal-header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 16px; }}
-            .modal-header h3 {{ margin: 0; font-size: 1.25em; }}
             .close-button {{ background: none; border: none; font-size: 1.8em; cursor: pointer; color: var(--text-secondary); transition: color 0.2s; }}
             .close-button:hover {{ color: var(--text-primary); }}
-            #modalFilePath {{ font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; color: var(--text-secondary); margin-bottom: 16px; }}
-            .code-context {{ background: #111827; color: #D1D5DB; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; }}
-            .code-context .highlight {{ background-color: rgba(249, 115, 22, 0.3); color: #FDBA74; padding: 2px 4px; border-radius: 4px; }}
-            .code-context code {{ color: inherit; background: none; padding: 0; }}
+            #modalFilePath {{ font-family: "SFMono-Regular", Consolas, monospace; color: var(--text-secondary); margin-bottom: 16px; }}
+            .code-context {{ background: #0d1117; color: #c9d1d9; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace; border: 1px solid var(--border-color); }}
+            .code-context .highlight {{ background-color: rgba(247, 129, 102, 0.2); color: #f78166; padding: 2px 4px; border-radius: 4px; }}
+            .remediation-section ul, .remediation-section ol {{ padding-left: 20px; }}
+            .remediation-section a {{ color: var(--accent-color); text-decoration: none; }}
+            .remediation-section a:hover {{ text-decoration: underline; }}
         </style>
     </head>
     <body>
         <div class="sidebar">
-            <div class="sidebar-header">
-                <i data-feather="shield"></i>
-                <span>Secret Finder</span>
-            </div>
+            <div class="sidebar-header"><i data-feather="shield"></i><span>Secret Finder</span></div>
             <nav class="sidebar-nav">
                 <a href="#dashboard" class="nav-link active" onclick="showPage('dashboard', this)"><i data-feather="layout"></i> Dashboard</a>
                 <a href="#findings" class="nav-link" onclick="showPage('findings', this)"><i data-feather="search"></i> Findings</a>
@@ -204,24 +280,35 @@ def generate_html_report(findings, apk_name, scan_time):
 
         <div class="main-content">
             <div id="dashboard" class="page active">
-                <div class="panel">
-                    <h1>Dashboard</h1>
-                    <p style="color: var(--text-secondary);"><strong>Target:</strong> {html.escape(apk_name)} | <strong>Scan Duration:</strong> {scan_time:.2f}s | <strong>Report Generated:</strong> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                </div>
-                <div class="panel">
-                    <h2>Scan Summary</h2>
-                    <div class="summary-grid">
-                        <div class="card critical"><div class="count">{critical_count}</div><div class="label">Critical</div></div>
-                        <div class="card high"><div class="count">{high_count}</div><div class="label">High</div></div>
-                        <div class="card medium"><div class="count">{medium_count}</div><div class="label">Medium</div></div>
-                        <div class="card low"><div class="count">{low_count}</div><div class="label">Low</div></div>
+                <h1>Security Dashboard</h1>
+                <div class="grid-container">
+                    <div class="panel">
+                        <h2>APK Details</h2>
+                        <dl class="apk-details">
+                            <dt>File Name</dt><dd>{html.escape(apk_details['file_name'])}</dd>
+                            <dt>Package</dt><dd>{html.escape(apk_details['package_name'])}</dd>
+                            <dt>File Size</dt><dd>{apk_details['file_size']}</dd>
+                            <dt>MD5</dt><dd>{apk_details['md5']}</dd>
+                            <dt>SHA1</dt><dd>{apk_details['sha1']}</dd>
+                            <dt>SHA256</dt><dd>{apk_details['sha256']}</dd>
+                        </dl>
+                    </div>
+                    <div class="panel">
+                        <h2>Executive Summary</h2>
+                        <p>Scan completed on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} in {scan_time:.2f} seconds. A total of <strong>{len(findings)}</strong> potential secrets were discovered.</p>
+                        <div class="grid-container" style="grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+                            <div class="card critical" style="padding: 16px;"><div class="count">{critical_count}</div><div class="label">Critical</div></div>
+                            <div class="card high" style="padding: 16px;"><div class="count">{high_count}</div><div class="label">High</div></div>
+                            <div class="card medium" style="padding: 16px;"><div class="count">{medium_count}</div><div class="label">Medium</div></div>
+                            <div class="card low" style="padding: 16px;"><div class="count">{low_count}</div><div class="label">Low</div></div>
+                        </div>
                     </div>
                 </div>
                 <div class="panel">
                     <h2>Analytics</h2>
-                    <div class="charts-grid">
-                        <div><canvas id="severityChart"></canvas></div>
-                        <div><canvas id="typeChart"></canvas></div>
+                    <div class="grid-container" style="align-items: center;">
+                        <div style="height: 300px;"><canvas id="severityChart"></canvas></div>
+                        <div style="height: 300px;"><canvas id="typeChart"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -230,15 +317,7 @@ def generate_html_report(findings, apk_name, scan_time):
                 <div class="panel">
                     <h2>Findings ({len(findings)})</h2>
                     <table id="findingsTable">
-                        <thead>
-                            <tr>
-                                <th data-sort="severity">Severity</th>
-                                <th data-sort="name">Finding Type</th>
-                                <th data-sort="secret">Secret (Preview)</th>
-                                <th data-sort="file_path">Location</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th data-sort="severity">Severity</th><th data-sort="name">Finding Type</th><th data-sort="secret">Secret (Preview)</th><th data-sort="file_path">Location</th><th>Actions</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -248,20 +327,26 @@ def generate_html_report(findings, apk_name, scan_time):
         <div id="contextModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Code Context</h3>
+                    <h3 id="modalTitle">Finding Details</h3>
                     <button class="close-button" onclick="closeModal()">&times;</button>
                 </div>
+                <h3>Exposed Secret</h3>
+                <code id="modalSecret"></code>
+                <h3 style="margin-top: 24px;">Location</h3>
                 <div id="modalFilePath"></div>
+                <h3 style="margin-top: 24px;">Code Context</h3>
                 <pre class="code-context"><code id="modalCodeContext"></code></pre>
+                <h3 style="margin-top: 24px;">Remediation</h3>
+                <div id="modalRemediation" class="remediation-section"></div>
             </div>
         </div>
 
         <script>
             const findingsData = {findings_json};
+            const remediations = {remediations_json};
             const severityDistribution = {json.dumps(severity_distribution)};
             const topFindingTypes = {json.dumps(top_finding_types)};
 
-            // --- Navigation ---
             function showPage(pageId, element) {{
                 document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
                 document.getElementById(pageId).classList.add('active');
@@ -269,39 +354,21 @@ def generate_html_report(findings, apk_name, scan_time):
                 element.classList.add('active');
             }}
 
-            // --- Charting ---
-            Chart.defaults.color = '#9CA3AF';
-            Chart.defaults.borderColor = '#374151';
+            Chart.defaults.color = '#8b949e';
+            Chart.defaults.borderColor = '#30363d';
+            Chart.defaults.font.family = "'Poppins', sans-serif";
 
             new Chart(document.getElementById('severityChart'), {{
                 type: 'doughnut',
-                data: {{
-                    labels: Object.keys(severityDistribution),
-                    datasets: [{{
-                        data: Object.values(severityDistribution),
-                        backgroundColor: ['#EF4444', '#F97316', '#FBBF24', '#22C55E'],
-                        borderWidth: 0,
-                    }}]
-                }},
-                options: {{ responsive: true, plugins: {{ legend: {{ position: 'bottom', labels: {{ padding: 20 }} }}, title: {{ display: true, text: 'Findings by Severity', font: {{ size: 16, weight: '600' }}, padding: {{ bottom: 20 }} }} }} }}
+                data: {{ labels: Object.keys(severityDistribution), datasets: [{{ data: Object.values(severityDistribution), backgroundColor: ['#f85149', '#f78166', '#d29922', '#3fb950'], borderWidth: 0, hoverOffset: 4 }}] }},
+                options: {{ responsive: true, maintainAspectRatio: false, plugins: {{ legend: {{ position: 'bottom', labels: {{ padding: 20 }} }}, title: {{ display: true, text: 'Findings by Severity', font: {{ size: 16, weight: '600' }}, padding: {{ bottom: 20 }} }} }} }}
             }});
-
             new Chart(document.getElementById('typeChart'), {{
                 type: 'bar',
-                data: {{
-                    labels: Object.keys(topFindingTypes),
-                    datasets: [{{
-                        label: 'Finding Count',
-                        data: Object.values(topFindingTypes),
-                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-                        borderColor: '#3B82F6',
-                        borderWidth: 1,
-                    }}]
-                }},
-                options: {{ indexAxis: 'y', responsive: true, plugins: {{ legend: {{ display: false }}, title: {{ display: true, text: 'Top 5 Finding Types', font: {{ size: 16, weight: '600' }}, padding: {{ bottom: 20 }} }} }}, scales: {{ y: {{ ticks: {{ color: '#D1D5DB' }} }}, x: {{ ticks: {{ color: '#D1D5DB' }} }} }} }}
+                data: {{ labels: Object.keys(topFindingTypes), datasets: [{{ label: 'Finding Count', data: Object.values(topFindingTypes), backgroundColor: 'rgba(88, 166, 255, 0.2)', borderColor: '#58a6ff', borderWidth: 1, hoverBackgroundColor: 'rgba(88, 166, 255, 0.4)' }}] }},
+                options: {{ indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: {{ legend: {{ display: false }}, title: {{ display: true, text: 'Top 5 Finding Types', font: {{ size: 16, weight: '600' }}, padding: {{ bottom: 20 }} }} }}, scales: {{ y: {{ grid: {{ display: false }} }}, x: {{ grid: {{ color: '#30363d' }} }} }} }}
             }});
             
-            // --- Table & Interactivity ---
             const tableBody = document.querySelector('#findingsTable tbody');
             let currentSort = {{ column: 'severity', order: 'asc' }};
             const severityOrder = {{ 'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3 }};
@@ -315,68 +382,44 @@ def generate_html_report(findings, apk_name, scan_time):
                             <td>${{f.name}}</td>
                             <td><code>${{f.secret.length > 50 ? f.secret.substring(0, 50) + '...' : f.secret}}</code></td>
                             <td class="filepath">${{f.file_path.split(/[\\\\/]/).pop()}}</td>
-                            <td class="actions">
-                                <button onclick="copyToClipboard('${{f.secret.replace(/'/g, "\\'")}}', this)" title="Copy Secret"><i data-feather="copy"></i></button>
-                                <button onclick="showModal(${{index}})" title="View Context"><i data-feather="code"></i></button>
-                            </td>
-                        </tr>
-                    `;
+                            <td class="actions"><button onclick="showModal(${{index}})" title="View Details"><i data-feather="eye"></i></button></td>
+                        </tr>`;
                     tableBody.innerHTML += row;
                 }});
-                feather.replace();
+                feather.replace({{ width: '18', height: '18' }});
             }}
 
             function sortData(column) {{
                 const order = (currentSort.column === column && currentSort.order === 'asc') ? 'desc' : 'asc';
                 currentSort = {{ column, order }};
-
                 findingsData.sort((a, b) => {{
-                    let valA = a[column];
-                    let valB = b[column];
-                    if (column === 'severity') {{
-                        valA = severityOrder[valA];
-                        valB = severityOrder[valB];
-                    }}
+                    let valA = a[column], valB = b[column];
+                    if (column === 'severity') {{ valA = severityOrder[valA]; valB = severityOrder[valB]; }}
                     let comparison = 0;
-                    if (valA > valB) comparison = 1;
-                    else if (valA < valB) comparison = -1;
+                    if (valA > valB) comparison = 1; else if (valA < valB) comparison = -1;
                     return order === 'desc' ? comparison * -1 : comparison;
                 }});
                 renderTable(findingsData);
             }}
 
-            document.querySelectorAll('#findingsTable th[data-sort]').forEach(th => {{
-                th.addEventListener('click', () => sortData(th.dataset.sort));
-            }});
+            document.querySelectorAll('#findingsTable th[data-sort]').forEach(th => th.addEventListener('click', () => sortData(th.dataset.sort)));
 
-            function copyToClipboard(text, element) {{
-                navigator.clipboard.writeText(text).then(() => {{
-                    const originalIcon = element.innerHTML;
-                    element.innerHTML = '<i data-feather="check"></i>';
-                    feather.replace();
-                    setTimeout(() => {{
-                        element.innerHTML = originalIcon;
-                        feather.replace();
-                    }}, 1500);
-                }});
-            }}
-
-            // --- Modal ---
             const modal = document.getElementById('contextModal');
             function showModal(index) {{
                 const finding = findingsData[index];
+                document.getElementById('modalTitle').innerHTML = `<span class="sev-${{finding.severity}}" style="padding: 4px 10px; border-radius: 8px; margin-right: 12px;">${{finding.severity}}</span> ${{finding.name}}`;
+                document.getElementById('modalSecret').textContent = finding.secret;
                 document.getElementById('modalFilePath').innerText = `${{finding.file_path}} (Line: ${{finding.line_number}})`;
-                const highlightedContext = finding.context.replace(finding.secret, `<span class="highlight">${{finding.secret}}</span>`);
-                document.getElementById('modalCodeContext').innerHTML = highlightedContext;
+                document.getElementById('modalCodeContext').innerHTML = finding.context.replace(finding.secret, `<span class="highlight">${{finding.secret}}</span>`);
+                document.getElementById('modalRemediation').innerHTML = remediations[finding.name] || remediations['Default'];
                 modal.style.display = 'flex';
             }}
             function closeModal() {{ modal.style.display = 'none'; }}
             window.onclick = (event) => {{ if (event.target == modal) closeModal(); }};
 
-            // --- Initial Load ---
             document.addEventListener('DOMContentLoaded', () => {{
-                sortData('severity'); // Initially sort by severity
-                feather.replace();
+                sortData('severity');
+                feather.replace({{ width: '20', height: '20' }});
                 document.querySelector('.nav-link.active').click();
             }});
         </script>
@@ -449,13 +492,11 @@ def check_file_for_secrets(file_path, combined_regex, name_map):
                     pattern_details = name_map[group_name]
                     pattern_name = pattern_details["name"]
                     
-                    # Rerun the original, specific regex to correctly extract the secret group
                     original_regex = SENSITIVE_PATTERNS[pattern_name]['Regex']
                     sub_match = original_regex.search(full_match_text)
                     
-                    secret = full_match_text # Default to the full match as a fallback
+                    secret = full_match_text
                     if sub_match and sub_match.groups():
-                        # Find the last non-None captured group, which is typically the secret
                         actual_secret = next((g for g in reversed(sub_match.groups()) if g is not None), None)
                         if actual_secret:
                             secret = actual_secret
@@ -476,22 +517,24 @@ def check_file_for_secrets(file_path, combined_regex, name_map):
 def scan_apk(apk_path, check_all_files=False):
     """Decompiles and scans an APK for secrets using parallel processing."""
     start_time = time.time()
-    apk_name = os.path.splitext(os.path.basename(apk_path.strip('"')))[0]
+    apk_path = apk_path.strip('"')
+    
     decompiled_path = decompile_apk(apk_path)
     if not decompiled_path:
-        return [], apk_name, 0
+        return [], None, 0
+
+    print("\nExtracting APK details...")
+    apk_details = get_apk_details(apk_path, decompiled_path)
 
     print("\nBuilding combined regex for efficient scanning...")
     combined_regex, name_map = build_combined_regex()
     
     print("Searching for sensitive information...\n")
-    all_matches = []
     
     files_to_scan = []
     if check_all_files:
         for root, _, files in os.walk(decompiled_path):
             for file in files:
-                # Exclude binary/asset files that are unlikely to contain text-based secrets
                 if not file.endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp3', '.mp4', '.otf', '.ttf')):
                     files_to_scan.append(os.path.join(root, file))
     else:
@@ -500,6 +543,7 @@ def scan_apk(apk_path, check_all_files=False):
             if os.path.exists(path):
                 files_to_scan.append(path)
 
+    all_matches = []
     scan_func = partial(check_file_for_secrets, combined_regex=combined_regex, name_map=name_map)
     with ProcessPoolExecutor() as executor:
         results = list(tqdm(executor.map(scan_func, files_to_scan), total=len(files_to_scan), desc="Scanning Files"))
@@ -517,7 +561,7 @@ def scan_apk(apk_path, check_all_files=False):
             seen.add(identifier)
     
     scan_time = time.time() - start_time
-    return unique_matches, apk_name, scan_time
+    return unique_matches, apk_details, scan_time
 
 @print_tool_name
 def main():
@@ -532,7 +576,7 @@ def main():
             "Select file check option \n1. Basic Scan (Fast - Checks AndroidManifest.xml and strings.xml)\n2. Advanced Scan (Slow - Checks all decompiled files): "))
 
         if file_check_option in [1, 2]:
-            sensitive_matches, apk_name, scan_time = scan_apk(apk_path, check_all_files=(file_check_option == 2))
+            sensitive_matches, apk_details, scan_time = scan_apk(apk_path, check_all_files=(file_check_option == 2))
         else:
             print("Invalid option selected. Please try again.")
             return
@@ -542,7 +586,7 @@ def main():
         else:
             print(Fore.YELLOW + f"\nScan complete. Found {len(sensitive_matches)} potential secrets.")
             sorted_matches = sorted(sensitive_matches, key=lambda x: ["Critical", "High", "Medium", "Low"].index(x['severity']))
-            generate_html_report(sorted_matches, apk_name, scan_time)
+            generate_html_report(sorted_matches, apk_details, scan_time)
 
     except ValueError:
         print(Fore.RED + "Invalid input. Please enter 1 or 2 for the scan option.")
