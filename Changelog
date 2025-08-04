@@ -1,0 +1,56 @@
+Secret Finder Changelog
+Version 2.0.0 (Codename: "Sherlock") - 2025-08-04
+
+This release marks a complete architectural overhaul of Secret Finder, elevating it from a simple keyword-based script to a high-performance, pattern-matching static analysis engine for security auditing. The core scanning logic, performance, and reporting capabilities have been fundamentally rewritten to provide faster, more accurate, and more actionable results.
+
+Summary of Changes
+Core Engine Rewrite: The detection engine has been replaced with a comprehensive library of high-precision regular expressions, targeting specific secret formats to drastically reduce false positives.
+
+Parallel Processing: The scanner now leverages multiprocessing to scan files concurrently, significantly decreasing scan times on multi-core systems.
+
+Interactive HTML Reporting: All findings are now presented in a professional, self-contained HTML dashboard featuring interactive charts, sortable data, and in-line code context previews.
+
+Severity Classification: Findings are now categorized by severity (Critical, High, Medium, Low) to help users prioritize remediation efforts on the most impactful exposures.
+
+Detailed Changelog
+[!] Core Engine & Detection
+
+core: Rewrite scanner to use a regex-based engine. The previous keyword-matching logic has been entirely removed in favor of a more robust and accurate pattern-matching system (SENSITIVE_PATTERNS). This is a fundamental change to how secrets are detected.
+
+engine: Introduce severity levels for all patterns. Each regex pattern is now associated with a severity level to better contextualize the risk of a finding.
+
+engine: Implement a combined regex builder. For performance, all patterns are compiled into a single, efficient regex object at runtime, minimizing file I/O cycles.
+
+scanner: Add de-duplication logic. The engine now filters out duplicate findings based on the secret, location, and finding type to ensure a clean and concise final report.
+
+[+] New Features & Reporting
+
+report: Add interactive HTML dashboard generation. The primary output is now a single, portable HTML file that serves as a comprehensive security dashboard.
+
+report: Integrate Chart.js for data visualization. The dashboard includes doughnut and bar charts to visualize the distribution of findings by severity and type.
+
+report: Add code context modal. Users can now view the exact line of code where a secret was found, with the secret highlighted, directly within the report.
+
+report: Add "Copy to Clipboard" functionality. Discovered secrets can be copied directly from the findings table in the report.
+
+patterns: Add over 40 high-precision regex patterns. Added detection for a wide variety of secrets, including AWS keys, GitHub tokens, private keys, JWTs, database URIs, and platform-specific API keys (Stripe, Slack, etc.).
+
+[*] Improvements & Optimizations
+
+perf: Implement multiprocessing for file scanning. The "Advanced Scan" now utilizes concurrent.futures.ProcessPoolExecutor to distribute the workload across available CPU cores, dramatically improving performance.
+
+perf: Exclude binary files from scans. The scanner now intelligently skips common binary and asset file types (e.g., .png, .mp3, .ttf) to avoid unnecessary processing.
+
+apktool: Force overwrite of previous decompilations. The decompile_apk function now uses the -f flag to ensure a clean state for every scan.
+
+cli: Improve user prompts and error messages. CLI output is now clearer, with more specific error handling for missing files or failed decompilation.
+
+fs: Handle file encoding errors gracefully. The file reader now ignores Unicode decoding errors, preventing a single malformed file from halting an entire scan.
+
+[-] Bug Fixes
+
+fix: Correctly extract capture groups from complex regex. A secondary match is now performed to ensure the precise secret (the capture group), not just the entire matching line, is extracted and reported.
+
+Credits
+
+This release builds upon the foundational work by viralvaghela.
