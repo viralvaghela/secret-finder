@@ -13,8 +13,8 @@
 
 ---
 
-<details>
-<summary><strong>✨ View Screenshots</strong></summary>
+
+<summary><strong> Screenshots</strong></summary>
 <br>
 <table>
   <tr>
@@ -33,7 +33,7 @@
     <td><img src="./screenshots/6.png" alt="Interactive HTML Report - Code Context Dark" width="280"></td>
   </tr>
 </table>
-</details>
+
 
 ---
 
