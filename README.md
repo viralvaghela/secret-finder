@@ -1,12 +1,8 @@
 <div align="center">
 
-# Secret Finder
+# 🛡️ Secret Finder
 
-**A high-performance static analysis tool to find secrets, API keys, and tokens in Android APKs.**
-
-</div>
-
-<div align="center">
+### A high-performance static analysis tool to find secrets, API keys, and tokens in Android APKs.
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/viralvaghela)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -17,17 +13,27 @@
 
 ---
 
-<div align="center">
-  <img src="./screenshots/1.png" alt="Interactive HTML Report - Dashboard" width="300">
-  <img src="./screenshots/2.png" alt="Interactive HTML Report - Findings Table" width="300">
-  <img src="./screenshots/3.png" alt="Interactive HTML Report - Code Context" width="300">
-</div>
-
-<div align="center">
-  <img src="./screenshots/4.png" alt="Interactive HTML Report - Dashboard" width="300">
-  <img src="./screenshots/5.png" alt="Interactive HTML Report - Findings Table" width="300">
-  <img src="./screenshots/6.png" alt="Interactive HTML Report - Code Context" width="300">
-</div>
+<details>
+<summary><strong>✨ View Screenshots</strong></summary>
+<br>
+<table>
+  <tr>
+    <td align="center">Dashboard View</td>
+    <td align="center">Findings Table</td>
+    <td align="center">Code Context</td>
+  </tr>
+  <tr>
+    <td><img src="./screenshots/1.png" alt="Interactive HTML Report - Dashboard" width="280"></td>
+    <td><img src="./screenshots/2.png" alt="Interactive HTML Report - Findings Table" width="280"></td>
+    <td><img src="./screenshots/3.png" alt="Interactive HTML Report - Code Context" width="280"></td>
+  </tr>
+    <tr>
+    <td><img src="./screenshots/4.png" alt="Interactive HTML Report - Dashboard Dark" width="280"></td>
+    <td><img src="./screenshots/5.png" alt="Interactive HTML Report - Findings Table Dark" width="280"></td>
+    <td><img src="./screenshots/6.png" alt="Interactive HTML Report - Code Context Dark" width="280"></td>
+  </tr>
+</table>
+</details>
 
 ---
 
@@ -35,67 +41,70 @@
 
 The output is a beautiful, self-contained HTML report that provides a clear, actionable overview of all findings, helping developers and security auditors quickly identify and remediate potential vulnerabilities.
 
-## ✨ Key Features
+## 🌟 Key Features
 
-*   **🎯 High-Precision Regex Engine:** Utilizes a comprehensive library of over 40 regex patterns to accurately detect private keys, API keys (AWS, Google, Stripe), OAuth tokens, database URIs, and much more.
-*   **⚡ Blazing Fast Scans:** Leverages multiprocessing to scan files in parallel, drastically reducing analysis time on multi-core systems.
-*   **📊 Interactive Dashboard:** Generates a professional HTML report with interactive charts, a sortable findings table, and in-line code context previews.
-*   **🎚️ Severity Ranking:** Classifies findings as **Critical**, **High**, **Medium**, or **Low** to help you prioritize the most dangerous exposures first.
-*   **⚙️ Simple & Flexible:** Easy-to-use CLI with options for a quick basic scan or a comprehensive deep scan of all files.
+* **🎯 High-Precision Regex Engine:** Utilizes a comprehensive library of over 40 regex patterns to accurately detect private keys, API keys (AWS, Google, Stripe), OAuth tokens, database URIs, and much more.
+* **⚡️ Blazing Fast Scans:** Leverages multiprocessing to scan files in parallel, drastically reducing analysis time on multi-core systems.
+* **📊 Interactive Dashboard:** Generates a professional HTML report with interactive charts, a sortable findings table, and in-line code context previews.
+* **🎚️ Severity Ranking:** Classifies findings as **Critical**, **High**, **Medium**, or **Low** to help you prioritize the most dangerous exposures first.
+* **⚙️ Simple & Flexible:** Easy-to-use CLI with options for a quick basic scan or a comprehensive deep scan of all files.
 
-## 🚀 Installation
+## 🚀 Getting Started
 
-Secret Finder is a Python script and requires Python 3.8+.
+### Prerequisites
+
+* Python 3.8+
+
+### Installation
 
 1.  **Clone the repository:**
-
     ```bash
-    git clone https://github.com/viralvaghela/secret-finder.git
+    git clone [https://github.com/viralvaghela/secret-finder.git](https://github.com/viralvaghela/secret-finder.git)
     cd secret-finder
     ```
 
 2.  **Install dependencies:**
-
     ```bash
     pip install -r requirements.txt
     ```
 
 3.  **Download `apktool.jar`:**
+    *(Ensure `apktool.jar` is available in your PATH or the project directory).*
 
 ## 🛠️ Usage
 
-Using the tool is straightforward. Point it at your target APK file and choose your scan level.
+Using the tool is straightforward. Point it at your target APK file and choose your scan level via the interactive prompt.
 
-usage: secret_finder.py
+```sh
+$ python secret_finder.py
 
 Welcome to the Secret Finder!
 
 Enter the path to the APK file: path/to/your/app.apk
 
-Select file check option
+Select file check option:
+[1] Basic Scan (Fast - Checks AndroidManifest.xml and strings.xml)
+[2] Advanced Scan (Slow - Checks all decompiled files)
+Enter your choice (1 or 2): 2
+```
 
-Basic Scan (Fast - Checks AndroidManifest.xml and strings.xml)
-
-Advanced Scan (Slow - Checks all decompiled files): 2
-
-*   **Basic Scan:** A quick check of the most common locations for hardcoded secrets. Ideal for a fast, initial assessment.
-*   **Advanced Scan:** A comprehensive analysis that decompiles the entire APK and scans every single file. Recommended for deep security audits.
+* **Basic Scan:** A quick check of the most common locations for hardcoded secrets. Ideal for a fast, initial assessment.
+* **Advanced Scan:** A comprehensive analysis that decompiles the entire APK and scans every single file. Recommended for deep security audits.
 
 ## 📄 Sample Report
 
-After a scan is complete, a report file named `security_report_<apk_name>.html` will be generated.
+After a scan is complete, a report file named `security_report_<apk_name>.html` will be generated in the root directory.
 
 The interactive report allows you to:
-
-*   View a summary of findings.
-*   See the distribution of secrets by severity and type.
-*   Sort and search through all findings.
-*   Click to view the exact line of code where the secret was found.
-*   Copy the secret value directly to your clipboard.
+* View a summary of findings with charts.
+* See the distribution of secrets by severity and type.
+* Sort, filter, and search through all findings.
+* Click a finding to view the exact line of code where the secret was found.
+* Copy the secret value or file path directly to your clipboard.
 
 ## 🤝 Contributing
 
-Contributions are welcome! Whether it's adding a new regex pattern, improving the code, or fixing a bug, please feel free to open a pull request.
+Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
 1.  Fork the Project
 2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
