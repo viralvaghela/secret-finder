@@ -170,9 +170,12 @@ def build_combined_regex():
     all_patterns = []
     for i, (name, pattern_info) in enumerate(SENSITIVE_PATTERNS.items()):
         group_name = f'group{i}'
-        all_patterns.append(f'(?P<{group_name}>{pattern_info["Regex"].pattern})')
+        pattern = pattern_info["Regex"].pattern
+        if pattern.startswith("(?i)"):
+            pattern = pattern[4:]
+        all_patterns.append(f'(?P<{group_name}>{pattern})')
         name_map[group_name] = {"name": name, "severity": pattern_info["Severity"]}
-    combined_regex = re.compile('|'.join(all_patterns))
+    combined_regex = re.compile('|'.join(all_patterns), re.IGNORECASE)
     return combined_regex, name_map
 
 def get_apk_details(apk_path, decompiled_path):
